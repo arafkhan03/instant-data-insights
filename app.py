@@ -100,6 +100,8 @@ if uploaded_file:
         "column_summary": column_summary
     }
 
+    metadata = json.loads(json.dumps(metadata, default=str))
+    
     ai_json_obj = {
         "columns": column_types,
         "rows": rows,
