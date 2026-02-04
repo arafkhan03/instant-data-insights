@@ -155,16 +155,25 @@ if uploaded_file:
     # -------------------------------
     charts = ai_json.get("charts", [])
     for c in charts:
-        col1 = c.get("column")
+        col_str = c.get("column", "")
         chart_type = c.get("chart_type", "bar")
         title = c.get("title", "")
         description = c.get("description", "")
-
-        if col1 in df.columns:
-            # If y is numeric, pick the first numeric column that's not col1
-            numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col]) and col != col1]
-            y_col = numeric_cols[0] if numeric_cols else None
-
+    
+        # Split columns if AI returned multiple
+        col_candidates = [col.strip() for col in col_str.split(",")]
+    
+        # Pick the first column that exists in df
+        col1 = next((col for col in col_candidates if col in df.columns), None)
+        if not col1:
+            st.text(f"Skipping chart '{title}': no matching columns found in DataFrame.")
+            continue
+    
+        # Pick y column if needed: first numeric column not used as x
+        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col]) and col != col1]
+        y_col = numeric_cols[0] if numeric_cols else None
+    
+        try:
             if chart_type == "bar":
                 fig = px.bar(df, x=col1, y=y_col)
             elif chart_type == "line":
@@ -174,13 +183,18 @@ if uploaded_file:
             elif chart_type == "histogram":
                 fig = px.histogram(df, x=col1)
             else:
+                st.text(f"Skipping chart '{title}': unknown chart type '{chart_type}'.")
                 continue
-
+    
             if title:
                 st.markdown(f"**{title}**")
             st.plotly_chart(fig, use_container_width=True)
             if description:
                 st.markdown(f"*{description}*")
+    
+        except Exception:
+            st.text(f"Error generating chart '{title}':")
+            st.text(traceback.format_exc())
 
     # -------------------------------
     # Feedback
