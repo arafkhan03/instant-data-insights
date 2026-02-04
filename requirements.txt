@@ -4,3 +4,4 @@ plotly
 openpyxl
 huggingface_hub
 rich
+openai
