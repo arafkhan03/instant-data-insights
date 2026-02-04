@@ -134,6 +134,7 @@ Charts should include column names and chart type ('bar', 'line', 'histogram', '
             messages=[{"role": "user", "content": prompt}],
         )
         ai_output_text = completion.choices[0].message.content
+        st.text(ai_output_text)
         ai_json = json.loads(ai_output_text)
     except Exception:
         st.warning("AI analysis failed!")
