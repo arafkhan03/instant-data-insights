@@ -118,4 +118,10 @@ Charts should include column names and chart type ('bar', 'line', 'histogram', '
 
     if st.button("Submit Feedback"):
         feedback_data = {
-            "feedb
+            "feedback": feedback,
+            "email": email,
+            "file": uploaded_file.name
+        }
+        with open("feedback_log.jsonl", "a") as f:
+            f.write(json.dumps(feedback_data) + "\n")
+        st.success("Thanks for your feedback!")
