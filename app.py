@@ -131,6 +131,13 @@ Charts should include column names and chart type ('bar', 'line', 'histogram', '
     import traceback
 
     try:
+        import requests
+        HF_TOKEN = st.secrets.get("HF_TOKEN")
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+        
+        r = requests.get("https://huggingface.co/api/whoami-v2", headers=headers)
+        st.write(r.json())
+
         response = client.text_generation(model="google/flan-t5-large", prompt=prompt, max_new_tokens=300)
         ai_output_text = response.generated_text
         ai_json = json.loads(ai_output_text)
