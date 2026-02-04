@@ -135,16 +135,17 @@ if uploaded_file:
             model="Qwen/Qwen2.5-7B-Instruct",
             messages=[{"role": "user", "content": prompt}],
         )
-
+    
         ai_output_text = completion.choices[0].message.content
         st.write("Raw AI output:", repr(ai_output_text))
-
-        if ai_output_text and ai_output_text.strip():
-            ai_json = json.loads(ai_output_text)
+    
+        # Clean AI output and parse JSON in one line
+        ai_json = json.loads(ai_output_text[ai_output_text.find("{") : ai_output_text.rfind("}") + 1])
 
     except Exception:
         st.warning("AI analysis failed!")
         st.text(traceback.format_exc())
+        ai_json = {"summary": "AI analysis not available", "charts": []}
 
     # Show summary
     st.markdown(f"**Summary:** {ai_json.get('summary')}")
