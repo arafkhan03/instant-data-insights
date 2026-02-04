@@ -11,11 +11,7 @@ from huggingface_hub import InferenceClient
 # -------------------------------
 st.set_page_config(page_title="Instant Data Insights", layout="wide")
 
-
 HF_TOKEN = st.secrets.get("HF_TOKEN")  # Add your Hugging Face token in Streamlit Secrets
-
-st.write(HF_TOKEN)  # DEBUG: check if token is actually being read
-
 client = InferenceClient(token=HF_TOKEN)
 
 MAX_ROWS = 50  # Only analyze first 50 rows
@@ -118,15 +114,15 @@ if uploaded_file:
 
     # Build prompt
     prompt = f"""
-You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
-
-{ai_json_str}
-
-1. Suggest a brief summary of the dataset (2-3 sentences)
-2. Suggest 2-3 meaningful charts to visualize the data
-Return a JSON with 'summary' and 'charts' fields. 
-Charts should include column names and chart type ('bar', 'line', 'histogram', 'scatter').
-"""
+    You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
+    
+    {ai_json_str}
+    
+    1. Suggest a brief summary of the dataset (2-3 sentences)
+    2. Suggest 2-3 meaningful charts to visualize the data
+    Return a JSON with 'summary' and 'charts' fields. 
+    Charts should include column names and chart type ('bar', 'line', 'histogram', 'scatter').
+    """
 
     import traceback
 
@@ -138,9 +134,26 @@ Charts should include column names and chart type ('bar', 'line', 'histogram', '
         r = requests.get("https://huggingface.co/api/whoami-v2", headers=headers)
         st.write(r.json())
 
-        response = client.text_generation(model="google/flan-t5-large", prompt=prompt, max_new_tokens=300)
-        ai_output_text = response.generated_text
+        from openai import OpenAI
+        import os
+        
+        # Make sure HF_TOKEN is set
+        HF_TOKEN = st.secrets.get("HF_TOKEN")
+        os.environ['HF_TOKEN'] = HF_TOKEN
+        
+        client = OpenAI(
+            base_url="https://router.huggingface.co/v1",
+            api_key=os.environ["HF_TOKEN"],
+        )
+        
+        completion = client.chat.completions.create(
+            model="Qwen/Qwen2.5-7B-Instruct",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        
+        ai_output_text = completion.choices[0].message.content
         ai_json = json.loads(ai_output_text)
+
     except Exception as e:
         st.warning("AI analysis failed!")
         st.text(traceback.format_exc())  # <-- full error and traceback
