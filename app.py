@@ -115,15 +115,15 @@ if uploaded_file:
     # Build prompt for AI
     # -------------------------------
     prompt = f"""
-You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
-
-{ai_json_str}
-
-1. Suggest a brief summary of the dataset (2-3 sentences)
-2. Suggest 2-3 meaningful charts to visualize the data
-Return a JSON with 'summary' and 'charts' fields. 
-Charts should include 'column', 'chart_type' ('bar', 'line', 'histogram', 'scatter'), 'title', and 'description'.
-"""
+    You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
+    
+    {ai_json_str}
+    
+    1. Suggest a brief summary of the dataset (2-3 sentences)
+    2. Suggest 2-3 meaningful charts to visualize the data
+    Return a JSON with 'summary' and 'charts' fields. 
+    Charts should include 'column', 'chart_type' ('bar', 'line', 'histogram', 'scatter'), 'title', and 'description'.
+    """
 
     # -------------------------------
     # AI Analysis
@@ -137,6 +137,7 @@ Charts should include 'column', 'chart_type' ('bar', 'line', 'histogram', 'scatt
         )
 
         ai_output_text = completion.choices[0].message.content
+        st.write("Raw AI output:", repr(ai_output_text))
 
         if ai_output_text and ai_output_text.strip():
             ai_json = json.loads(ai_output_text)
