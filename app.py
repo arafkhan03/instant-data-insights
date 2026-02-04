@@ -137,6 +137,8 @@ if uploaded_file:
         )
 
         ai_output_text = completion.choices[0].message.content
+        ai_json = json.loads(ai_output_text[ai_output_text.find("{"):])
+        
         st.write("Raw AI output:", repr(ai_output_text))
 
         if ai_output_text and ai_output_text.strip():
