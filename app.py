@@ -120,8 +120,8 @@ You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
 
 1. Suggest a brief summary of the dataset (2-3 sentences)
 2. Suggest 2-3 meaningful charts to visualize the data
-Return a JSON with 'summary' and 'charts' fields.
-Charts should include column names and chart type ('bar', 'line', 'histogram', 'scatter').
+Return a JSON object with exactly two keys: "summary" and "charts". 
+Each chart in "charts" must include "column" for the column name, "chart_type" (one of 'bar', 'line', 'histogram', 'scatter'), and optionally "title" and "description". Do not include any other text outside this JSON.
 """
 
     # -------------------------------
