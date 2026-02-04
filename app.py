@@ -102,10 +102,11 @@ if uploaded_file:
     }
 
     # Final JSON to send to AI
+    metadata_safe = json.loads(json.dumps(metadata, default=str))
     ai_json_obj = {
         "columns": column_types,
         "rows": rows,
-        "metadata": metadata
+        "metadata": metadata_safe
     }
 
     ai_json_str = json.dumps(ai_json_obj, ensure_ascii=False, indent=2)
