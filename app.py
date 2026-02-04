@@ -114,56 +114,69 @@ if uploaded_file:
     # Build prompt
     # -------------------------------
     prompt = f"""
-You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
-
-{ai_json_str}
-
-1. Suggest a brief summary of the dataset (2-3 sentences)
-2. Suggest 2-3 meaningful charts to visualize the data
-Return a JSON object with exactly two keys: "summary" and "charts". 
-Each chart in "charts" must include "column" for the column name, "chart_type" (one of 'bar', 'line', 'histogram', 'scatter'), and optionally "title" and "description". Do not include any other text outside this JSON.
-"""
+    You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
+    
+    {ai_json_str}
+    
+    1. Suggest a brief summary of the dataset (2-3 sentences)
+    2. Suggest 2-3 meaningful charts to visualize the data
+    Return a JSON object with exactly two keys: "summary" and "charts". 
+    Each chart in "charts" must include "column" for the column name, "chart_type" (one of 'bar', 'line', 'histogram', 'scatter'), and optionally "title" and "description". Do not include any other text outside this JSON.
+    """
 
     # -------------------------------
-    # AI Analysis
-    # -------------------------------
-    st.subheader("🧠 AI Summary & Suggested Charts")
-    try:
-        completion = client.chat.completions.create(
-            model="Qwen/Qwen2.5-7B-Instruct",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        ai_output_text = completion.choices[0].message.content
-        st.text(ai_output_text)
-        ai_json = json.loads(ai_output_text)
-    except Exception:
-        st.warning("AI analysis failed!")
-        st.text(traceback.format_exc())
-        ai_json = {"summary": "AI analysis not available", "charts": []}
+# AI Analysis
+# -------------------------------
+st.subheader("🧠 AI Summary & Suggested Charts")
+try:
+    completion = client.chat.completions.create(
+        model="Qwen/Qwen2.5-7B-Instruct",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    ai_output_text = completion.choices[0].message.content
+    st.text(ai_output_text)  # optional: see raw AI output
+    ai_json = json.loads(ai_output_text)
+except Exception:
+    st.warning("AI analysis failed!")
+    st.text(traceback.format_exc())
+    ai_json = {"summary": "AI analysis not available", "charts": []}
 
-    # Show summary
+    # -------------------------------
+    # Show Summary
+    # -------------------------------
     st.markdown(f"**Summary:** {ai_json.get('summary')}")
-
+    
     # -------------------------------
     # Generate charts
     # -------------------------------
     charts = ai_json.get("charts", [])
     for c in charts:
-        col1 = c.get("x")
-        col2 = c.get("y")
-        chart_type = c.get("type", "bar")
-        if col1 in df.columns and (col2 in df.columns or col2 is None):
-            if chart_type == "bar":
-                fig = px.bar(df, x=col1, y=col2)
-            elif chart_type == "line":
-                fig = px.line(df, x=col1, y=col2)
-            elif chart_type == "scatter":
-                fig = px.scatter(df, x=col1, y=col2)
-            elif chart_type == "histogram":
-                fig = px.histogram(df, x=col1)
-            else:
-                continue
-            st.plotly_chart(fig, use_container_width=True)
+        column_name = c.get("column")
+        chart_type = c.get("chart_type", "bar")
+        title = c.get("title", "")
+        description = c.get("description", "")
+    
+        if column_name not in df.columns:
+            continue
+    
+        # Create figure based on chart type
+        if chart_type == "bar":
+            fig = px.bar(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
+        elif chart_type == "line":
+            fig = px.line(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
+        elif chart_type == "scatter":
+            fig = px.scatter(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
+        elif chart_type == "histogram":
+            fig = px.histogram(df, x=column_name)
+        else:
+            continue
+    
+        # Display chart with title and description
+        if title:
+            st.subheader(title)
+        st.plotly_chart(fig, use_container_width=True)
+        if description:
+            st.caption(description)
 
     # -------------------------------
     # Feedback
