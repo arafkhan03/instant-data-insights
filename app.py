@@ -1,105 +1,121 @@
-import streamlit as st
+import io
+import json
 import pandas as pd
 import plotly.express as px
+import streamlit as st
 from huggingface_hub import InferenceClient
-import json
-import io
 
-# ===== Hugging Face client =====
-HF_TOKEN = st.secrets.get("HF_TOKEN", "")
-client = InferenceClient(HF_TOKEN)
-
+# -------------------------------
+# Config
+# -------------------------------
 st.set_page_config(page_title="Instant Data Insights", layout="wide")
-st.title("Instant Data Insights (AI + Charts)")
+HF_TOKEN = st.secrets.get("HF_TOKEN")  # Add your Hugging Face token in Streamlit Secrets
+client = InferenceClient(token=HF_TOKEN)
 
-# ===== File Upload =====
+MAX_ROWS = 50  # Only analyze first 50 rows
+
+# -------------------------------
+# Upload
+# -------------------------------
+st.title("📊 Instant Data Insights")
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
+
 if uploaded_file:
-    file_ext = uploaded_file.name.split(".")[-1].lower()
-    if file_ext == "csv":
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
-    df_first50 = df.head(50)
-    st.write("Preview first 50 rows")
-    st.dataframe(df_first50)
-
-    # ===== Column AI =====
-    st.subheader("Column Analysis")
-    col_prompt = f"""
-    Dataset columns: {list(df_first50.columns)}
-    Show fixed/clean column names, column type (numeric, categorical, date), 
-    and basic stats (mean, min, max, unique, missing values). 
-    Respond in JSON with keys: column_name, fixed_name, type, stats.
-    Use first 50 rows sample: {df_first50.to_dict(orient='records')}
-    """
-    col_response = client.text_generation(model="google/flan-t5-small", inputs=col_prompt, parameters={"max_new_tokens":500})
+    # Read file
     try:
-        col_json = json.loads(col_response.generated_text)
-        st.json(col_json)
-    except:
-        st.warning("Column AI response could not be parsed, showing raw text.")
-        st.text(col_response.generated_text)
-        col_json = None
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file).head(MAX_ROWS)
+        else:
+            df = pd.read_excel(uploaded_file).head(MAX_ROWS)
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+        st.stop()
 
-    # ===== Analyst AI =====
-    st.subheader("Dataset Summary & Chart Suggestions")
-    if col_json:
-        analyst_prompt = f"""
-        Columns info: {col_json}
-        Based on the first 50 rows, generate:
-        1. A quick textual summary of dataset insights
-        2. Suggested charts: type, x, y, color, title
-        Respond in JSON: {{'summary': str, 'charts': [{{'chart_type','x','y','color','title'}}]}}
-        """
-        analyst_response = client.text_generation(model="google/flan-t5-small", inputs=analyst_prompt, parameters={"max_new_tokens":500})
-        try:
-            analyst_json = json.loads(analyst_response.generated_text)
-            st.json(analyst_json)
-        except:
-            st.warning("Analyst AI response could not be parsed, showing raw text.")
-            st.text(analyst_response.generated_text)
-            analyst_json = None
+    st.success(f"File loaded! Shape: {df.shape}")
+    st.dataframe(df)
 
-        # ===== Chart Generation =====
-        if analyst_json and "charts" in analyst_json:
-            st.subheader("Generated Charts")
-            for c in analyst_json["charts"]:
-                chart_type = c.get("chart_type")
-                x = c.get("x")
-                y = c.get("y")
-                color = c.get("color")
-                title = c.get("title", f"{chart_type} of {y} vs {x}")
+    # -------------------------------
+    # Column Analysis
+    # -------------------------------
+    st.subheader("🔧 Column Analysis")
+    column_summary = []
+    for col in df.columns:
+        col_type = "numeric" if pd.api.types.is_numeric_dtype(df[col]) else "categorical"
+        col_info = {
+            "name": col,
+            "type": col_type,
+            "unique": df[col].nunique(),
+            "missing": df[col].isna().sum(),
+        }
+        column_summary.append(col_info)
+    st.json(column_summary)
 
-                if chart_type.lower() == "bar":
-                    fig = px.bar(df_first50, x=x, y=y, color=color, title=title)
-                    st.plotly_chart(fig, use_container_width=True)
-                elif chart_type.lower() == "line":
-                    fig = px.line(df_first50, x=x, y=y, color=color, title=title)
-                    st.plotly_chart(fig, use_container_width=True)
-                elif chart_type.lower() == "histogram":
-                    fig = px.histogram(df_first50, x=x, color=color, title=title)
-                    st.plotly_chart(fig, use_container_width=True)
+    # -------------------------------
+    # AI Analysis & Chart Suggestions
+    # -------------------------------
+    st.subheader("🧠 AI Summary & Suggested Charts")
 
-    # ===== Feedback =====
-    st.subheader("Feedback")
+    # Prepare prompt for the AI analyst
+    first_rows_json = df.head(MAX_ROWS).to_dict(orient="records")
+    prompt = f"""
+You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
+
+{json.dumps(first_rows_json)}
+
+1. Suggest a brief summary of the dataset (2-3 sentences)
+2. Suggest 2-3 meaningful charts to visualize the data
+Return a JSON with 'summary' and 'charts' fields. 
+Charts should include column names and chart type ('bar', 'line', 'histogram', 'scatter').
+"""
+
+    try:
+        response = client.text_generation(model="google/flan-t5-large", inputs=prompt, max_new_tokens=300)
+        ai_output_text = response.generated_text
+        ai_json = json.loads(ai_output_text)
+    except Exception as e:
+        st.warning(f"AI analysis failed: {e}")
+        ai_json = {"summary": "AI analysis not available", "charts": []}
+
+    # Show summary
+    st.markdown(f"**Summary:** {ai_json.get('summary')}")
+
+    # Generate charts
+    charts = ai_json.get("charts", [])
+    for c in charts:
+        col1 = c.get("x")
+        col2 = c.get("y")
+        chart_type = c.get("type", "bar")
+        if col1 in df.columns and (col2 in df.columns or col2 is None):
+            if chart_type == "bar":
+                fig = px.bar(df, x=col1, y=col2)
+            elif chart_type == "line":
+                fig = px.line(df, x=col1, y=col2)
+            elif chart_type == "scatter":
+                fig = px.scatter(df, x=col1, y=col2)
+            elif chart_type == "histogram":
+                fig = px.histogram(df, x=col1)
+            else:
+                continue
+            st.plotly_chart(fig, use_container_width=True)
+
+    # -------------------------------
+    # Download cleaned data
+    # -------------------------------
+    st.subheader("💾 Download Data")
+    buf = io.BytesIO()
+    df.to_excel(buf, index=False)
+    st.download_button("Download Excel", buf, file_name="cleaned_data.xlsx")
+
+    # -------------------------------
+    # Feedback
+    # -------------------------------
+    st.subheader("👍 Feedback")
     feedback_col1, feedback_col2 = st.columns([1,3])
     with feedback_col1:
-        thumbs = st.radio("Was this useful?", ["👍 Yes", "👎 No"])
+        feedback = st.radio("Was this analysis helpful?", ("👍 Yes", "👎 No"))
     with feedback_col2:
-        email = st.text_input("Optional email for follow-up")
+        email = st.text_input("Optional: your email for follow-up")
 
     if st.button("Submit Feedback"):
-        feedback_record = pd.DataFrame([{
-            "feedback": thumbs,
-            "email": email
-        }])
-        feedback_record.to_csv("feedback_log.csv", mode="a", index=False, header=st.session_state.get("feedback_file_created", True))
-        st.session_state["feedback_file_created"] = False
-        st.success("Thanks for your feedback!")
-
-    # ===== Download cleaned file =====
-    st.subheader("Download Cleaned Data")
-    buf = io.BytesIO()
-    df_first50.to_csv(buf, index=False)
-    st.download_button("Download CSV", data=buf.getvalue(), file_name="cleaned_data.csv", mime="text/csv")
+        feedback_data = {
+            "feedb
