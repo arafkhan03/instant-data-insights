@@ -1,28 +1,27 @@
 import io
 import json
-import os
 import pandas as pd
 import numpy as np
 import plotly.express as px
 import streamlit as st
 from openai import OpenAI
+import os
 import traceback
 
 # -------------------------------
 # Config
 # -------------------------------
 st.set_page_config(page_title="Instant Data Insights", layout="wide")
-MAX_ROWS = 50  # Only analyze first 50 rows
 
-# Get HF_TOKEN from Streamlit secrets
-HF_TOKEN = st.secrets.get("HF_TOKEN")
-os.environ['HF_TOKEN'] = HF_TOKEN
+HF_TOKEN = st.secrets.get("HF_TOKEN")  # Add your Hugging Face token in Streamlit Secrets
+os.environ["HF_TOKEN"] = HF_TOKEN
 
-# Initialize OpenAI-compatible Hugging Face client
 client = OpenAI(
     base_url="https://router.huggingface.co/v1",
     api_key=os.environ["HF_TOKEN"],
 )
+
+MAX_ROWS = 50  # Only analyze first 50 rows
 
 # -------------------------------
 # Upload
@@ -45,18 +44,21 @@ if uploaded_file:
     st.dataframe(df)
 
     # -------------------------------
-    # Column Analysis
+    # Column Analysis (summary only)
     # -------------------------------
     st.subheader("🔧 Column Analysis")
-    numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
-    categorical_cols = [col for col in df.columns if not pd.api.types.is_numeric_dtype(df[col])]
-    st.markdown(f"**Numeric columns:** {', '.join(numeric_cols) if numeric_cols else 'None'}")
-    st.markdown(f"**Categorical columns:** {', '.join(categorical_cols) if categorical_cols else 'None'}")
+    col_types = {"numeric": [], "categorical": []}
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            col_types["numeric"].append(col)
+        else:
+            col_types["categorical"].append(col)
+    st.markdown(f"**Numeric columns:** {', '.join(col_types['numeric']) or 'None'}")
+    st.markdown(f"**Categorical columns:** {', '.join(col_types['categorical']) or 'None'}")
 
     # -------------------------------
     # Prepare JSON for AI
     # -------------------------------
-    # Column types
     column_types = {col: str(dtype) for col, dtype in df.dtypes.items()}
 
     # Convert rows to JSON-safe types
@@ -93,6 +95,7 @@ if uploaded_file:
                 "num_unique": int(df[col].nunique())
             }
 
+    # Metadata
     metadata = {
         "num_rows": len(df),
         "num_columns": len(df.columns),
@@ -100,83 +103,82 @@ if uploaded_file:
         "column_summary": column_summary
     }
 
-    metadata = json.loads(json.dumps(metadata, default=str))
-    
+    metadata_safe = json.loads(json.dumps(metadata, default=str))
     ai_json_obj = {
         "columns": column_types,
         "rows": rows,
-        "metadata": metadata
+        "metadata": metadata_safe
     }
-
     ai_json_str = json.dumps(ai_json_obj, ensure_ascii=False, indent=2)
 
     # -------------------------------
-    # Build prompt
+    # Build prompt for AI
     # -------------------------------
     prompt = f"""
-    You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
-    
-    {ai_json_str}
-    
-    1. Suggest a brief summary of the dataset (2-3 sentences)
-    2. Suggest 2-3 meaningful charts to visualize the data
-    Return a JSON object with exactly two keys: "summary" and "charts". 
-    Each chart in "charts" must include "column" for the column name, "chart_type" (one of 'bar', 'line', 'histogram', 'scatter'), and optionally "title" and "description". Do not include any other text outside this JSON.
-    """
+You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
+
+{ai_json_str}
+
+1. Suggest a brief summary of the dataset (2-3 sentences)
+2. Suggest 2-3 meaningful charts to visualize the data
+Return a JSON with 'summary' and 'charts' fields. 
+Charts should include 'column', 'chart_type' ('bar', 'line', 'histogram', 'scatter'), 'title', and 'description'.
+"""
 
     # -------------------------------
-# AI Analysis
-# -------------------------------
-st.subheader("🧠 AI Summary & Suggested Charts")
-try:
-    completion = client.chat.completions.create(
-        model="Qwen/Qwen2.5-7B-Instruct",
-        messages=[{"role": "user", "content": prompt}],
-    )
-    ai_output_text = completion.choices[0].message.content
-    st.text(ai_output_text)  # optional: see raw AI output
-    ai_json = json.loads(ai_output_text)
-except Exception:
-    st.warning("AI analysis failed!")
-    st.text(traceback.format_exc())
-    ai_json = {"summary": "AI analysis not available", "charts": []}
+    # AI Analysis
+    # -------------------------------
+    st.subheader("🧠 AI Summary & Suggested Charts")
+    ai_json = {"summary": "AI analysis not available", "charts": []}  # default
+    try:
+        completion = client.chat.completions.create(
+            model="Qwen/Qwen2.5-7B-Instruct",
+            messages=[{"role": "user", "content": prompt}],
+        )
 
-    # -------------------------------
-    # Show Summary
-    # -------------------------------
+        ai_output_text = completion.choices[0].message.content
+
+        if ai_output_text and ai_output_text.strip():
+            ai_json = json.loads(ai_output_text)
+
+    except Exception:
+        st.warning("AI analysis failed!")
+        st.text(traceback.format_exc())
+
+    # Show summary
     st.markdown(f"**Summary:** {ai_json.get('summary')}")
-    
+
     # -------------------------------
     # Generate charts
     # -------------------------------
     charts = ai_json.get("charts", [])
     for c in charts:
-        column_name = c.get("column")
+        col1 = c.get("column")
         chart_type = c.get("chart_type", "bar")
         title = c.get("title", "")
         description = c.get("description", "")
-    
-        if column_name not in df.columns:
-            continue
-    
-        # Create figure based on chart type
-        if chart_type == "bar":
-            fig = px.bar(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
-        elif chart_type == "line":
-            fig = px.line(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
-        elif chart_type == "scatter":
-            fig = px.scatter(df, x=column_name, y=df[column_name] if pd.api.types.is_numeric_dtype(df[column_name]) else None)
-        elif chart_type == "histogram":
-            fig = px.histogram(df, x=column_name)
-        else:
-            continue
-    
-        # Display chart with title and description
-        if title:
-            st.subheader(title)
-        st.plotly_chart(fig, use_container_width=True)
-        if description:
-            st.caption(description)
+
+        if col1 in df.columns:
+            # If y is numeric, pick the first numeric column that's not col1
+            numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col]) and col != col1]
+            y_col = numeric_cols[0] if numeric_cols else None
+
+            if chart_type == "bar":
+                fig = px.bar(df, x=col1, y=y_col)
+            elif chart_type == "line":
+                fig = px.line(df, x=col1, y=y_col)
+            elif chart_type == "scatter":
+                fig = px.scatter(df, x=col1, y=y_col)
+            elif chart_type == "histogram":
+                fig = px.histogram(df, x=col1)
+            else:
+                continue
+
+            if title:
+                st.markdown(f"**{title}**")
+            st.plotly_chart(fig, use_container_width=True)
+            if description:
+                st.markdown(f"*{description}*")
 
     # -------------------------------
     # Feedback
