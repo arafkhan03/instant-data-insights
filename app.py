@@ -126,7 +126,7 @@ Charts should include column names and chart type ('bar', 'line', 'histogram', '
     import traceback
 
     try:
-        response = client.text_generation(model="google/flan-t5-large", inputs=prompt, max_new_tokens=300)
+        response = client.text_generation(model="google/flan-t5-large", prompt=prompt, max_new_tokens=300)
         ai_output_text = response.generated_text
         ai_json = json.loads(ai_output_text)
     except Exception as e:
