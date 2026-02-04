@@ -10,7 +10,12 @@ from huggingface_hub import InferenceClient
 # Config
 # -------------------------------
 st.set_page_config(page_title="Instant Data Insights", layout="wide")
+
+
 HF_TOKEN = st.secrets.get("HF_TOKEN")  # Add your Hugging Face token in Streamlit Secrets
+
+st.write(HF_TOKEN)  # DEBUG: check if token is actually being read
+
 client = InferenceClient(token=HF_TOKEN)
 
 MAX_ROWS = 50  # Only analyze first 50 rows
