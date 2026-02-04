@@ -119,10 +119,15 @@ if uploaded_file:
     
     {ai_json_str}
     
-    1. Suggest a brief summary of the dataset (2-3 sentences)
-    2. Suggest 2-3 meaningful charts to visualize the data
-    Return a JSON with 'summary' and 'charts' fields. 
-    Charts should include 'column', 'chart_type' ('bar', 'line', 'histogram', 'scatter'), 'title', and 'description'.
+    1. Suggest a brief summary of the dataset (2-3 sentences).
+    2. Suggest 2-3 meaningful charts to visualize the data. Each chart should include **at most 2 columns**: one for the x-axis and one optional for the y-axis. Always choose the most significant column(s) for each chart based on the data.
+    
+    Return a JSON with 'summary' and 'charts' fields. Each chart should include:
+    - 'x_axis': name of the column for the x-axis
+    - 'y_axis' (optional): name of the column for the y-axis if relevant
+    - 'chart_type': one of 'bar', 'line', 'histogram', 'scatter'
+    - 'title': chart title
+    - 'description': short description of the chart
     """
 
     # -------------------------------
@@ -155,37 +160,60 @@ if uploaded_file:
     # -------------------------------
     charts = ai_json.get("charts", [])
     for c in charts:
-        col_str = c.get("column", "")
+        x_col = c.get("x_axis") or c.get("column")  # fallback to old 'column' if x_axis missing
+        y_col = c.get("y_axis")  # optional
         chart_type = c.get("chart_type", "bar")
         title = c.get("title", "")
         description = c.get("description", "")
     
-        # Split columns if AI returned multiple
-        col_candidates = [col.strip() for col in col_str.split(",")]
-    
-        # Pick the first column that exists in df
-        col1 = next((col for col in col_candidates if col in df.columns), None)
-        if not col1:
-            st.text(f"Skipping chart '{title}': no matching columns found in DataFrame.")
+        if not x_col or x_col not in df.columns:
+            st.text(f"Skipping chart '{title}': x-axis column '{x_col}' not found in DataFrame.")
             continue
     
-        # Pick y column if needed: first numeric column not used as x
-        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col]) and col != col1]
-        y_col = numeric_cols[0] if numeric_cols else None
+        # Pick y column if needed and not provided
+        if y_col and y_col not in df.columns:
+            y_col = None
+        if chart_type in ["bar", "line", "scatter"] and not y_col:
+            numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col]) and col != x_col]
+            y_col = numeric_cols[0] if numeric_cols else None
     
+        # -------------------------------
+        # Data cleaning
+        # -------------------------------
+        df_plot = df.copy()
+    
+        # Convert dates if x_col looks like datetime
+        if pd.api.types.is_object_dtype(df_plot[x_col]):
+            try:
+                df_plot[x_col] = pd.to_datetime(df_plot[x_col], errors="ignore")
+            except Exception:
+                pass
+    
+        # Sort by x_col if line chart
+        if chart_type == "line" and pd.api.types.is_datetime64_any_dtype(df_plot[x_col]):
+            df_plot = df_plot.sort_values(by=x_col)
+    
+        # Ensure y_col is numeric
+        if y_col:
+            df_plot[y_col] = pd.to_numeric(df_plot[y_col], errors="coerce")
+    
+        # -------------------------------
+        # Plot chart
+        # -------------------------------
         try:
             if chart_type == "bar":
-                fig = px.bar(df, x=col1, y=y_col)
+                fig = px.bar(df_plot, x=x_col, y=y_col)
             elif chart_type == "line":
-                fig = px.line(df, x=col1, y=y_col)
+                fig = px.line(df_plot, x=x_col, y=y_col)
             elif chart_type == "scatter":
-                fig = px.scatter(df, x=col1, y=y_col)
+                fig = px.scatter(df_plot, x=x_col, y=y_col)
             elif chart_type == "histogram":
-                fig = px.histogram(df, x=col1)
+                fig = px.histogram(df_plot, x=x_col)
             else:
                 st.text(f"Skipping chart '{title}': unknown chart type '{chart_type}'.")
                 continue
     
+            # Display title and description
             if title:
                 st.markdown(f"**{title}**")
             st.plotly_chart(fig, use_container_width=True)
