@@ -1,6 +1,7 @@
 import io
 import json
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import streamlit as st
 from huggingface_hub import InferenceClient
@@ -38,7 +39,7 @@ if uploaded_file:
     # Column Analysis
     # -------------------------------
     st.subheader("🔧 Column Analysis")
-    column_summary = []
+    column_summary_list = []
     for col in df.columns:
         col_type = "numeric" if pd.api.types.is_numeric_dtype(df[col]) else "categorical"
         col_info = {
@@ -47,20 +48,73 @@ if uploaded_file:
             "unique": df[col].nunique(),
             "missing": df[col].isna().sum(),
         }
-        column_summary.append(col_info)
-    st.json(column_summary)
+        column_summary_list.append(col_info)
+    st.json(column_summary_list)
 
     # -------------------------------
     # AI Analysis & Chart Suggestions
     # -------------------------------
     st.subheader("🧠 AI Summary & Suggested Charts")
 
-    # Prepare prompt for the AI analyst
-    first_rows_json = df.head(MAX_ROWS).to_dict(orient="records")
+    # Prepare safe JSON for AI
+    column_types = {col: str(dtype) for col, dtype in df.dtypes.items()}
+
+    # Convert rows to JSON-safe Python types
+    rows = []
+    for _, row in df.iterrows():
+        py_row = {}
+        for col in df.columns:
+            val = row[col]
+            if isinstance(val, (np.integer, np.int64, np.int32)):
+                py_row[col] = int(val)
+            elif isinstance(val, (np.floating, np.float64, np.float32)):
+                py_row[col] = float(val)
+            elif isinstance(val, (np.bool_)):
+                py_row[col] = bool(val)
+            elif pd.isna(val):
+                py_row[col] = None
+            else:
+                py_row[col] = str(val)
+        rows.append(py_row)
+
+    # Column statistics / summary
+    column_summary = {}
+    for col in df.columns:
+        if pd.api.types.is_numeric_dtype(df[col]):
+            column_summary[col] = {
+                "min": float(df[col].min()),
+                "max": float(df[col].max()),
+                "mean": float(df[col].mean()),
+                "std": float(df[col].std())
+            }
+        else:
+            column_summary[col] = {
+                "unique_values": df[col].dropna().unique().tolist(),
+                "num_unique": int(df[col].nunique())
+            }
+
+    # Metadata
+    metadata = {
+        "num_rows": len(df),
+        "num_columns": len(df.columns),
+        "source_file": uploaded_file.name,
+        "column_summary": column_summary
+    }
+
+    # Final JSON to send to AI
+    ai_json_obj = {
+        "columns": column_types,
+        "rows": rows,
+        "metadata": metadata
+    }
+
+    ai_json_str = json.dumps(ai_json_obj, ensure_ascii=False, indent=2)
+
+    # Build prompt
     prompt = f"""
 You are a data analyst. Here is a dataset (first {MAX_ROWS} rows):
 
-{json.dumps(first_rows_json)}
+{ai_json_str}
 
 1. Suggest a brief summary of the dataset (2-3 sentences)
 2. Suggest 2-3 meaningful charts to visualize the data
