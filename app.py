@@ -251,12 +251,12 @@ if uploaded_file:
     
         st.success("Thanks — this helps improve the app 🙏")
     
-    st.markdown(
-        """
-        <div style="text-align: center; color: #888; font-size: 0.9em; margin-top: 1rem;">
-            Developed by <a href="https://www.linkedin.com/in/arafkhan03/" target="_blank">Araf</a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+st.markdown(
+    """
+    <div style="text-align: center; color: #888; font-size: 0.9em; margin-top: 1rem;">
+        Developed by <a href="https://www.linkedin.com/in/arafkhan03/" target="_blank">Araf</a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
