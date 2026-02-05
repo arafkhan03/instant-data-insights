@@ -27,6 +27,7 @@ MAX_ROWS = 50  # Only analyze first 50 rows
 # Upload
 # -------------------------------
 st.title("📊 Instant Data Insights")
+st.caption("Upload a CSV or Excel file to instantly understand your data. You’ll get a quick summary, column insights, and automatically generated charts. No files or analyses stored.")
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
 if uploaded_file:
@@ -142,7 +143,7 @@ if uploaded_file:
         )
     
         ai_output_text = completion.choices[0].message.content
-        st.write("Raw AI output:", repr(ai_output_text))
+        #st.write("Raw AI output:", repr(ai_output_text))
     
         # Clean AI output and parse JSON in one line
         ai_json = json.loads(ai_output_text[ai_output_text.find("{") : ai_output_text.rfind("}") + 1])
@@ -225,21 +226,37 @@ if uploaded_file:
             st.text(traceback.format_exc())
 
     # -------------------------------
-    # Feedback
+    # Feedback (lightweight + high-signal)
     # -------------------------------
-    st.subheader("👍 Feedback")
-    feedback_col1, feedback_col2 = st.columns([1, 3])
-    with feedback_col1:
-        feedback = st.radio("Was this analysis helpful?", ("👍 Yes", "👎 No"))
-    with feedback_col2:
-        email = st.text_input("Optional: your email for follow-up")
-
-    if st.button("Submit Feedback"):
-        feedback_data = {
-            "feedback": feedback,
-            "email": email,
-            "file": uploaded_file.name
+    st.markdown("---")
+    
+    feedback_text = st.text_area(
+        "Something broke or felt off? (optional)",
+        placeholder="e.g. summary was wrong, chart looked weird, upload failed, slow, confusing…",
+    )
+    
+    if st.button("Submit feedback"):
+        feedback_payload = {
+            "feedback_text": feedback_text,
+            "file_name": uploaded_file.name if uploaded_file else None,
+            "num_rows": df.shape[0] if uploaded_file else None,
+            "num_columns": df.shape[1] if uploaded_file else None,
+            "columns": list(df.columns) if uploaded_file else None,
+            "ai_summary_present": bool(ai_json.get("summary")),
+            "num_charts_returned": len(ai_json.get("charts", [])),
         }
+    
         with open("feedback_log.jsonl", "a") as f:
-            f.write(json.dumps(feedback_data) + "\n")
-        st.success("Thanks for your feedback!")
+            f.write(json.dumps(feedback_payload) + "\n")
+    
+        st.success("Thanks — this helps improve the app 🙏")
+    
+    st.markdown(
+        """
+        <div style="text-align: center; color: #888; font-size: 0.9em; margin-top: 1rem;">
+            Developed by <a href="https://www.linkedin.com/in/arafkhan03/" target="_blank">Araf</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
