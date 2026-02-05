@@ -27,7 +27,7 @@ MAX_ROWS = 50  # Only analyze first 50 rows
 # Upload
 # -------------------------------
 st.title("📊 Instant Data Insights")
-st.caption("Upload a CSV or Excel file to instantly understand your data. You’ll get a quick summary, column insights, and automatically generated charts. No files or analyses stored.")
+st.caption("Upload a CSV or Excel file to instantly understand your data. You’ll get a quick summary, column insights, and automatically generated charts. No files or analyses stored. Give some moments for the summary & charts, thanks!")
 uploaded_file = st.file_uploader("Upload CSV or XLSX", type=["csv", "xlsx"])
 
 if uploaded_file:
